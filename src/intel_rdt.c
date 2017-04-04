@@ -36,6 +36,11 @@
 #define RDT_MAX_SOCKET_CORES 64
 #define RDT_MAX_CORES (RDT_MAX_SOCKET_CORES * RDT_MAX_SOCKETS)
 
+typedef enum {
+  UNKNOWN = 0,
+  CONFIGURATION_ERROR,
+} rdt_config_status;
+
 struct rdt_core_group_s {
   char *desc;
   size_t num_cores;
@@ -55,6 +60,8 @@ struct rdt_ctx_s {
 typedef struct rdt_ctx_s rdt_ctx_t;
 
 static rdt_ctx_t *g_rdt = NULL;
+
+static rdt_config_status g_state = UNKNOWN;
 
 static int isdup(const uint64_t *nums, size_t size, uint64_t val) {
   for (size_t i = 0; i < size; i++)
@@ -245,14 +252,13 @@ static int cgroup_set(rdt_core_group_t *cg, char *desc, uint64_t *cores,
  *   `item'        Config option containing core groups.
  *   `groups'      Table of core groups to set values in.
  *   `max_groups'  Maximum number of core groups allowed.
- *   `max_core'    Maximum allowed core value.
  *
  * RETURN VALUE
  *   On success, the number of core groups set up. On error, appropriate
  *   negative error value.
  */
 static int oconfig_to_cgroups(oconfig_item_t *item, rdt_core_group_t *groups,
-                              size_t max_groups, uint64_t max_core) {
+                              size_t max_groups) {
   int index = 0;
 
   assert(groups != NULL);
@@ -276,14 +282,6 @@ static int oconfig_to_cgroups(oconfig_item_t *item, rdt_core_group_t *groups,
       ERROR(RDT_PLUGIN ": Error parsing core group (%s)",
             item->values[j].value.string);
       return (-EINVAL);
-    }
-
-    for (int i = 0; i < n; i++) {
-      if (cores[i] > max_core) {
-        ERROR(RDT_PLUGIN ": Core group (%s) contains invalid core id (%d)",
-              item->values[j].value.string, (int)cores[i]);
-        return (-EINVAL);
-      }
     }
 
     /* set core group info */
@@ -388,6 +386,15 @@ static int rdt_default_cgroups(void) {
   return g_rdt->pqos_cpu->num_cores;
 }
 
+static int rdt_is_core_id_valid(int core_id) {
+
+  for (int i = 0; i < g_rdt->pqos_cpu->num_cores; i++)
+    if (core_id == g_rdt->pqos_cpu->cores[i].lcore)
+      return 1;
+
+  return 0;
+}
+
 static int rdt_config_cgroups(oconfig_item_t *item) {
   int n = 0;
   enum pqos_mon_event events = 0;
@@ -406,12 +413,25 @@ static int rdt_config_cgroups(oconfig_item_t *item) {
     DEBUG(RDT_PLUGIN ":  [%d]: %s", j, item->values[j].value.string);
   }
 
-  n = oconfig_to_cgroups(item, g_rdt->cgroups, RDT_MAX_CORES,
-                         g_rdt->pqos_cpu->num_cores - 1);
+  n = oconfig_to_cgroups(item, g_rdt->cgroups, g_rdt->pqos_cpu->num_cores);
   if (n < 0) {
     rdt_free_cgroups();
     ERROR(RDT_PLUGIN ": Error parsing core groups configuration.");
     return (-EINVAL);
+  }
+
+  /* validate configured core id values */
+  for (int group_idx = 0; group_idx < n; group_idx++) {
+    for (int core_idx = 0; core_idx < g_rdt->cgroups[group_idx].num_cores;
+         core_idx++) {
+      if (!rdt_is_core_id_valid(g_rdt->cgroups[group_idx].cores[core_idx])) {
+        ERROR(RDT_PLUGIN ": Core group '%s' contains invalid core id '%d'",
+                g_rdt->cgroups[group_idx].desc,
+                (int)g_rdt->cgroups[group_idx].cores[core_idx]);
+        rdt_free_cgroups();
+        return (-EINVAL);
+      }
+    }
   }
 
   if (n == 0) {
@@ -527,8 +547,14 @@ static int rdt_config(oconfig_item_t *ci) {
   int ret = 0;
 
   ret = rdt_preinit();
-  if (ret != 0)
-    return ret;
+  if (ret != 0) {
+    g_state = CONFIGURATION_ERROR;
+    /* if we return -1 at this point collectd
+      reports a failure in configuration and
+      aborts
+    */
+    goto exit;
+  }
 
   for (int i = 0; i < ci->children_num; i++) {
     oconfig_item_t *child = ci->children + i;
@@ -536,8 +562,14 @@ static int rdt_config(oconfig_item_t *ci) {
     if (strcasecmp("Cores", child->key) == 0) {
 
       ret = rdt_config_cgroups(child);
-      if (ret != 0)
-        return ret;
+      if (ret != 0) {
+        g_state = CONFIGURATION_ERROR;
+        /* if we return -1 at this point collectd
+           reports a failure in configuration and
+           aborts
+         */
+        goto exit;
+      }
 
 #if COLLECT_DEBUG
       rdt_dump_cgroups();
@@ -548,6 +580,7 @@ static int rdt_config(oconfig_item_t *ci) {
     }
   }
 
+exit:
   return (0);
 }
 
@@ -629,6 +662,9 @@ static int rdt_read(__attribute__((unused)) user_data_t *ud) {
 
 static int rdt_init(void) {
   int ret;
+
+  if(g_state == CONFIGURATION_ERROR)
+    return (-1);
 
   ret = rdt_preinit();
   if (ret != 0)

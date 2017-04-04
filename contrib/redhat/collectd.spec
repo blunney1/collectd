@@ -111,6 +111,7 @@
 %define with_openldap 0%{!?_without_openldap:1}
 %define with_openvpn 0%{!?_without_openvpn:1}
 %define with_ovs_events 0%{!?_without_ovs_events:1}
+%define with_ovs_stats 0%{!?_without_ovs_stats:1}
 %define with_perl 0%{!?_without_perl:1}
 %define with_pinba 0%{!?_without_pinba:1}
 %define with_ping 0%{!?_without_ping:1}
@@ -168,10 +169,12 @@
 %define with_aquaero 0%{!?_without_aquaero:0}
 # plugin barometer disabled, requires a libi2c
 %define with_barometer 0%{!?_without_barometer:0}
-# plugin grpc disabled, requires protobuf-compiler >= 3.0
-%define with_grpc 0%{!?_without_grpc:0}
+# plugin dpdkevents disabled, requires libdpdk
+%define with_dpdkevents 0%{!?_without_dpdkevents:0}
 # plugin dpdkstat disabled, requires libdpdk
 %define with_dpdkstat 0%{!?_without_dpdkstat:0}
+# plugin grpc disabled, requires protobuf-compiler >= 3.0
+%define with_grpc 0%{!?_without_grpc:0}
 # plugin lpar disabled, requires AIX
 %define with_lpar 0%{!?_without_lpar:0}
 # plugin intel_rdt disabled, requires intel-cmt-cat
@@ -230,6 +233,7 @@
 %define with_gps 0
 %define with_mqtt 0
 %define with_ovs_events 0
+%define with_ovs_stats 0
 %define with_redis 0
 %define with_rrdcached 0
 %define with_write_redis 0
@@ -239,8 +243,8 @@
 
 Summary:	Statistics collection and monitoring daemon
 Name:		collectd
-Version:	5.7.0
-Release:	4%{?dist}
+Version:	5.7.1
+Release:	6%{?dist}
 URL:		https://collectd.org
 Source:		https://collectd.org/files/%{name}-%{version}.tar.bz2
 License:	GPLv2
@@ -250,6 +254,7 @@ BuildRequires:	libgcrypt-devel, kernel-headers, libcap-devel, which
 Vendor:		collectd development team <collectd@verplant.org>
 
 %if 0%{?fedora} || 0%{?rhel} >= 7
+BuildRequires:		xfsprogs-devel
 %{?systemd_requires}
 BuildRequires:		systemd
 %else
@@ -677,6 +682,17 @@ BuildRequires: yajl-devel
 This plugin monitors the link status of Open vSwitch (OVS) connected
 interfaces, dispatches the values to collectd and sends notifications
 whenever a link state change occurs in the OVS database.
+%endif
+
+%if %{with_ovs_stats}
+%package ovs_stats
+Summary:       Open vSwitch statistics plugin for collectd
+Group:         System Environment/Daemons
+Requires:      %{name}%{?_isa} = %{version}-%{release}
+BuildRequires: yajl-devel
+%description ovs_stats
+This plugin collects statictics of OVS connected bridges and
+interfaces.
 %endif
 
 %if %{with_perl}
@@ -1125,6 +1141,12 @@ Collectd utilities
 %define _with_drbd --disable-drbd
 %endif
 
+%if %{with_dpdkevents}
+%define _with_dpdkevents --enable-dpdkevents
+%else
+%define _with_dpdkevents --disable-dpdkevents
+%endif
+
 %if %{with_dpdkstat}
 %define _with_dpdkstat --enable-dpdkstat
 %else
@@ -1465,6 +1487,12 @@ Collectd utilities
 %define _with_ovs_events --enable-ovs_events
 %else
 %define _with_ovs_events --disable-ovs_events
+%endif
+
+%if %{with_ovs_stats}
+%define _with_ovs_stats --enable-ovs_stats
+%else
+%define _with_ovs_stats --disable-ovs_stats
 %endif
 
 %if %{with_perl}
@@ -1843,6 +1871,7 @@ Collectd utilities
 	%{?_with_disk} \
 	%{?_with_dns} \
 	%{?_with_drbd} \
+	%{?_with_dpdkevents} \
 	%{?_with_dpdkstat} \
 	%{?_with_email} \
 	%{?_with_entropy} \
@@ -1899,6 +1928,7 @@ Collectd utilities
 	%{?_with_openvpn} \
 	%{?_with_oracle} \
 	%{?_with_ovs_events} \
+	%{?_with_ovs_stats} \
 	%{?_with_perl} \
 	%{?_with_pf} \
 	%{?_with_pinba} \
@@ -2125,9 +2155,6 @@ fi
 %if %{with_drbd}
 %{_libdir}/%{name}/drbd.so
 %endif
-%if %{with_dpdkstat}
-%{_libdir}/%{name}/dpdkstat.so
-%endif
 %if %{with_ethstat}
 %{_libdir}/%{name}/ethstat.so
 %endif
@@ -2208,9 +2235,6 @@ fi
 %endif
 %if %{with_olsrd}
 %{_libdir}/%{name}/olsrd.so
-%endif
-%if %{with_ovs_events}
-%{_libdir}/%{name}/ovs_events.so
 %endif
 %if %{with_powerdns}
 %{_libdir}/%{name}/powerdns.so
@@ -2389,6 +2413,16 @@ fi
 %{_libdir}/%{name}/dbi.so
 %endif
 
+%if %{with_dpdkevents}
+%files dpdkevents
+%{_libdir}/%{name}/dpdkevents.so
+%endif
+
+%if %{with_dpdkstat}
+%files dpdkstat
+%{_libdir}/%{name}/dpdkstat.so
+%endif
+
 %if %{with_email}
 %files email
 %{_libdir}/%{name}/email.so
@@ -2513,6 +2547,16 @@ fi
 %{_libdir}/%{name}/openldap.so
 %endif
 
+%if %{with_ovs_events}
+%files ovs_events
+%{_libdir}/%{name}/ovs_events.so
+%endif
+
+%if %{with_ovs_stats}
+%files ovs_stats
+%{_libdir}/%{name}/ovs_stats.so
+%endif
+
 %if %{with_perl}
 %files perl
 %{perl_vendorlib}/Collectd.pm
@@ -2632,6 +2676,25 @@ fi
 %doc contrib/
 
 %changelog
+* Sun Mar 05 2017 Ruben Kerkhof <ruben@rubenkerkhof.com> - 5.7.1-6
+- Move recently added plugins to subpackages
+
+* Sun Mar 05 2017 Ruben Kerkhof <ruben@rubenkerkhof.com> - 5.7.1-5
+- Add new ovs_stats plugin
+
+* Sun Mar 05 2017 Ruben Kerkhof <ruben@rubenkerkhof.com> - 5.7.1-4
+- Don't enable XFS support on RHEL6, it is missing for i386
+
+* Sun Mar 05 2017 Ruben Kerkhof <ruben@rubenkerkhof.com> - 5.7.1-3
+- Add dpdkevents plugin, disabled by default
+
+* Wed Feb 22 2017 Ruben Kerkhof <ruben@rubenkerkhof.com> - 5.7.1-2
+- Enable XFS support in df plugin
+- Fix bogus date in changelog
+
+* Sun Jan 01 2017 Marc Fournier <marc.fournier@camptocamp.com> - 5.7.1-1
+- New upstream version
+
 * Sat Dec 31 2016 Ruben Kerkhof <ruben@rubenkerkhof.com> - 5.7.0-4
 - Add new ovs_events plugin
 
