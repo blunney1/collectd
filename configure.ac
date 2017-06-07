@@ -27,6 +27,9 @@ AC_SYS_LARGEFILE
 AC_PROG_CC_C99([],
   [AC_MSG_ERROR([No compiler found that supports C99])]
 )
+
+AX_COMPILER_VENDOR
+
 AC_PROG_CXX
 AC_PROG_CPP
 AC_PROG_EGREP
@@ -34,7 +37,6 @@ AC_PROG_INSTALL
 AC_PROG_LN_S
 AC_PROG_MAKE_SET
 AM_PROG_CC_C_O
-AM_CONDITIONAL([COMPILER_IS_GCC], [test "x$GCC" = "xyes"])
 
 AC_PROG_LEX
 AC_PROG_YACC
@@ -60,9 +62,9 @@ if test "x$collectd_cv_prog_bison" = "xno" && test ! -f "${srcdir}/src/liboconfi
   AC_MSG_ERROR([bison is missing and you do not have ${srcdir}/src/liboconfig/parser.c. Please install bison])
 fi
 
-AS_IF([test "x$lt_cv_dlopen" = "xno"],
-  [AC_MSG_ERROR([Your system does not support dlopen])]
-)
+if test "x$lt_cv_dlopen" = "xno"; then
+  AC_MSG_ERROR([Your system does not support dlopen])
+fi
 
 AC_SUBST([DLOPEN_LIBS], [$lt_cv_dlopen_libs])
 
@@ -359,7 +361,7 @@ AC_CHECK_HEADERS([netinet/udp.h], [], [],
 AC_CHECK_HEADERS([sys/dkstat.h])
 if test "x$ac_system" = "xDarwin"; then
   AC_CHECK_HEADERS(
-    [[ \
+    [ \
       mach/mach_init.h \
       mach/host_priv.h \
       mach/mach_error.h \
@@ -383,7 +385,7 @@ if test "x$ac_system" = "xDarwin"; then
       IOKit/ps/IOPSKeys.h \
       IOKit/IOBSD.h \
       IOKit/storage/IOBlockStorageDriver.h
-    ]]
+    ]
   )
 
   # For the battery plugin
@@ -1039,6 +1041,92 @@ if test "x$GCC" = "xyes"; then
 fi
 # }}} Check for strptime
 
+# Check for timegm {{{
+
+# These checks need -Werror because implicit function declarations are only a
+# warning ...
+SAVE_CFLAGS="$CFLAGS"
+CFLAGS="$CFLAGS -Werror"
+
+AC_CACHE_CHECK([for timegm],
+  [c_cv_have_timegm],
+  AC_LINK_IFELSE(
+    [AC_LANG_PROGRAM(
+[[[
+#if STRPTIME_NEEDS_STANDARDS
+# ifndef _ISOC99_SOURCE
+#  define _ISOC99_SOURCE 1
+# endif
+# ifndef _POSIX_C_SOURCE
+#  define _POSIX_C_SOURCE 200112L
+# endif
+# ifndef _XOPEN_SOURCE
+#  define _XOPEN_SOURCE 500
+# endif
+#endif
+#include <time.h>
+]]],
+[[[
+ time_t t = timegm(&(struct tm){0});
+ if (t == ((time_t) -1)) {
+   return 1;
+ }
+]]]
+    )],
+    [c_cv_have_timegm="yes"],
+    [c_cv_have_timegm="no"]
+  )
+)
+
+if test "x$c_cv_have_timegm" != "xyes"
+then
+  AC_CACHE_CHECK([for timegm with _BSD_SOURCE],
+    [c_cv_have_timegm_bsd],
+    AC_LINK_IFELSE(
+      [AC_LANG_PROGRAM(
+[[[
+#if STRPTIME_NEEDS_STANDARDS
+# ifndef _ISOC99_SOURCE
+#  define _ISOC99_SOURCE 1
+# endif
+# ifndef _POSIX_C_SOURCE
+#  define _POSIX_C_SOURCE 200112L
+# endif
+# ifndef _XOPEN_SOURCE
+#  define _XOPEN_SOURCE 500
+# endif
+#endif
+#ifndef _BSD_SOURCE
+# define _BSD_SOURCE 1
+#endif
+#include <time.h>
+]]],
+[[[
+ time_t t = timegm(&(struct tm){0});
+ if (t == ((time_t) -1)) {
+   return 1;
+ }
+]]]
+      )],
+      [c_cv_have_timegm_bsd="yes"
+       c_cv_have_timegm="yes"],
+      [c_cv_have_timegm_bsd="no"]
+    )
+  )
+fi
+
+if test "x$c_cv_have_timegm" = "xyes"
+then
+  AC_DEFINE(HAVE_TIMEGM, 1, [Define if the timegm(3) function is available.])
+  if test "x$c_cv_have_timegm_bsd" = "xyes"
+  then
+    AC_DEFINE(TIMEGM_NEEDS_BSD, 1, [Set to true if timegm is only exported in BSD mode.])
+  fi
+fi
+
+CFLAGS="$SAVE_CFLAGS"
+# }}} Check for timegm
+
 AC_MSG_CHECKING([for sysctl kern.cp_times])
 if test -x /sbin/sysctl; then
   /sbin/sysctl kern.cp_times >/dev/null 2>&1
@@ -1313,8 +1401,8 @@ if test "x$fp_layout_type" = "xunknown"; then
                   && (c[2] == 0xc0) && (c[3] == 0xc7)
                   && (c[4] == 0x43) && (c[5] == 0x2b)
                   && (c[6] == 0x1f) && (c[7] == 0x5b))
-                return (0);
-              return (1);
+                return 0;
+              return 1;
             ]]
           )
         ],
@@ -1368,8 +1456,8 @@ if test "x$fp_layout_type" = "xunknown"; then
                   && (c[2] == 0xc0) && (c[3] == 0xc7)
                   && (c[4] == 0x43) && (c[5] == 0x2b)
                   && (c[6] == 0x1f) && (c[7] == 0x5b))
-                return (0);
-              return (1);
+                return 0;
+              return 1;
             ]]
           )
         ],
@@ -1417,8 +1505,8 @@ if test "x$fp_layout_type" = "xunknown"; then
                   && (c[2] == 0xc0) && (c[3] == 0xc7)
                   && (c[4] == 0x43) && (c[5] == 0x2b)
                   && (c[6] == 0x1f) && (c[7] == 0x5b))
-                return (0);
-              return (1);
+                return 0;
+              return 1;
             ]]
           )
         ],
@@ -2290,6 +2378,57 @@ AC_SUBST(BUILD_WITH_LIBDBI_LDFLAGS)
 AC_SUBST(BUILD_WITH_LIBDBI_LIBS)
 # }}}
 
+# --with-libdpdk {{{
+AC_ARG_VAR([LIBDPDK_CPPFLAGS], [Preprocessor flags for libdpdk])
+AC_ARG_VAR([LIBDPDK_LDFLAGS], [Linker flags for libdpdk])
+
+AC_ARG_WITH([libdpdk],
+  [AS_HELP_STRING([--without-libdpdk], [Disable libdpdk.])],
+  [with_libdpdk="$withval"],
+  [with_libdpdk="yes"]
+)
+
+if test "x$with_libdpdk" != "xno"; then
+  if test "x$LIBDPDK_CPPFLAGS" = "x"; then
+    LIBDPDK_CPPFLAGS="-I/usr/include/dpdk"
+  fi
+  SAVE_CPPFLAGS="$CPPFLAGS"
+  CPPFLAGS="$LIBDPDK_CPPFLAGS $CPPFLAGS"
+  AC_CHECK_HEADERS([rte_config.h],
+    [
+      with_libdpdk="yes"
+      AC_PREPROC_IFELSE(
+        [
+          AC_LANG_SOURCE(
+            [[
+              #include <rte_version.h>
+              #if RTE_VERSION < RTE_VERSION_NUM(16,7,0,0)
+              #error "required DPDK >= 16.07"
+              #endif
+            ]]
+          )
+        ],
+        [dpdk_keepalive="yes"],
+        [dpdk_keepalive="no (DPDK version < 16.07)"]
+      )
+    ],
+    [with_libdpdk="no (rte_config.h not found)"]
+  )
+  CPPFLAGS="$SAVE_CPPFLAGS"
+fi
+
+if test "x$with_libdpdk" = "xyes"; then
+  SAVE_LDFLAGS="$LDFLAGS"
+  LDFLAGS="$LIBDPDK_LDFLAGS $LDFLAGS"
+  AC_CHECK_LIB([dpdk], [rte_eal_init],
+    [with_libdpdk="yes"],
+    [with_libdpdk="no (symbol 'rte_eal_init' not found)"]
+  )
+  LDFLAGS="$SAVE_LDFLAGS"
+fi
+
+# }}}
+
 # --with-libesmtp {{{
 AC_ARG_WITH([libesmtp],
   [AS_HELP_STRING([--with-libesmtp@<:@=PREFIX@:>@], [Path to libesmtp.])],
@@ -2702,56 +2841,6 @@ AC_SUBST([BUILD_WITH_LIBIPTC_CPPFLAGS])
 AC_SUBST([BUILD_WITH_LIBIPTC_LDFLAGS])
 # }}}
 
-# --with-libdpdk {{{
-AC_ARG_VAR([LIBDPDK_CPPFLAGS], [Preprocessor flags for libdpdk])
-AC_ARG_VAR([LIBDPDK_LDFLAGS], [Linker flags for libdpdk])
-
-AC_ARG_WITH([libdpdk], [AS_HELP_STRING([--without-libdpdk], [Disable libdpdk.])])
-
-if test "x$with_libdpdk" != "xno"; then
-  if test "x$LIBDPDK_CPPFLAGS" = "x"; then
-    LIBDPDK_CPPFLAGS="-I/usr/include/dpdk"
-  fi
-  SAVE_CPPFLAGS="$CPPFLAGS"
-  CPPFLAGS="$LIBDPDK_CPPFLAGS $CPPFLAGS"
-  AC_CHECK_HEADERS([rte_config.h],
-    [
-      with_libdpdk="yes"
-      AC_COMPILE_IFELSE(
-        [
-          AC_LANG_PROGRAM(
-            [[
-              #include <rte_version.h>
-              #if RTE_VERSION < RTE_VERSION_NUM(16,7,0,0)
-              #error "required DPDK >= 16.07"
-              #endif
-            ]],
-            [[
-              return 0;
-            ]]
-          )
-        ],
-        [dpdk_keepalive="yes"],
-        [dpdk_keepalive="no (DPDK version < 16.07)"]
-      )
-    ],
-    [with_libdpdk="no (rte_config.h not found)"]
-  )
-  CPPFLAGS="$SAVE_CPPFLAGS"
-fi
-
-if test "x$with_libdpdk" = "xyes"; then
-  SAVE_LDFLAGS="$LDFLAGS"
-  LDFLAGS="$LIBDPDK_LDFLAGS $LDFLAGS"
-  AC_CHECK_LIB([dpdk], [rte_eal_init],
-    [with_libdpdk="yes"],
-    [with_libdpdk="no (symbol 'rte_eal_init' not found)"]
-  )
-  LDFLAGS="$SAVE_LDFLAGS"
-fi
-
-# }}}
-
 # --with-java {{{
 with_java_home="$JAVA_HOME"
 if test "x$with_java_home" = "x"; then
@@ -2775,6 +2864,9 @@ AC_ARG_WITH([java],
   [with_java="yes"]
 )
 
+AX_COMPARE_VERSION([$am__api_version],[lt],[1.12],
+  [JAVA_TIMESTAMP_FILE="classdist_noinst.stamp"],
+  [JAVA_TIMESTAMP_FILE="classnoinst.stamp"])
 if test "x$with_java" = "xyes"; then
   if test -d "$with_java_home"; then
     AC_MSG_CHECKING([for jni.h])
@@ -2911,6 +3003,7 @@ AC_SUBST([JAVA_CPPFLAGS])
 AC_SUBST([JAVA_CFLAGS])
 AC_SUBST([JAVA_LDFLAGS])
 AC_SUBST([JAVA_LIBS])
+AC_SUBST([JAVA_TIMESTAMP_FILE])
 AM_CONDITIONAL([BUILD_WITH_JAVA], [test "x$with_java" = "xyes"])
 # }}}
 
@@ -3310,52 +3403,62 @@ AC_ARG_WITH([libmongoc],
     else if test "x$withval" = "xno"; then
       with_libmongoc="no"
     else
-      with_libmongoc="yes"
-      LIBMONGOC_CPPFLAGS="$LIBMONGOC_CPPFLAGS -I$withval/include"
-      LIBMONGOC_LDFLAGS="$LIBMONGOC_LDFLAGS -L$withval/lib"
+      with_libmongoc="no"
     fi; fi
   ],
   [with_libmongoc="yes"]
 )
 
-SAVE_CPPFLAGS="$CPPFLAGS"
-SAVE_LDFLAGS="$LDFLAGS"
-
-CPPFLAGS="$CPPFLAGS $LIBMONGOC_CPPFLAGS"
-LDFLAGS="$LDFLAGS $LIBMONGOC_LDFLAGS"
-
 if test "x$with_libmongoc" = "xyes"; then
-  if test "x$LIBMONGOC_CPPFLAGS" != "x"; then
-    AC_MSG_NOTICE([libmongoc CPPFLAGS: $LIBMONGOC_CPPFLAGS])
-  fi
-
-  AC_CHECK_HEADERS([mongo.h],
+  PKG_CHECK_MODULES([LIBMONGOC], [libmongoc-1.0],
     [with_libmongoc="yes"],
-    [with_libmongoc="no ('mongo.h' not found)"],
-    [[#define MONGO_HAVE_STDINT 1]]
+    [with_libmongoc="no (pkg-config could not find libmongoc)"]
   )
 fi
 
 if test "x$with_libmongoc" = "xyes"; then
+  SAVE_CPPFLAGS="$CPPFLAGS"
+
+  CPPFLAGS="$CPPFLAGS $LIBMONGOC_CFLAGS"
+
+  if test "x$CPPFLAGS" != "x"; then
+    AC_MSG_NOTICE([libmongoc CPPFLAGS: $LIBMONGOC_CFLAGS])
+  fi
+
+  AC_CHECK_HEADERS([mongoc.h],
+    [with_libmongoc="yes"],
+    [with_libmongoc="no ('mongoc.h' not found)"]
+  )
+
+  CPPFLAGS="$SAVE_CPPFLAGS"
+fi
+
+if test "x$with_libmongoc" = "xyes"; then
+  SAVE_CPPFLAGS="$CPPFLAGS"
+  SAVE_LDFLAGS="$LDFLAGS"
+
+  CPPFLAGS="$CPPFLAGS $LIBMONGOC_CFLAGS"
+  LDFLAGS="$LDFLAGS $LIBMONGOC_LDFLAGS"
+
   if test "x$LIBMONGOC_LDFLAGS" != "x"; then
     AC_MSG_NOTICE([libmongoc LDFLAGS: $LIBMONGOC_LDFLAGS])
   fi
 
-  AC_CHECK_LIB([mongoc], [mongo_run_command],
+  AC_CHECK_LIB([mongoc-1.0], [mongoc_init],
     [with_libmongoc="yes"],
-    [with_libmongoc="no (symbol 'mongo_run_command' not found)"]
+    [with_libmongoc="no (symbol 'mongoc_init' not found)"]
   )
+
+  CPPFLAGS="$SAVE_CPPFLAGS"
+  LDFLAGS="$SAVE_LDFLAGS"
 fi
 
-CPPFLAGS="$SAVE_CPPFLAGS"
-LDFLAGS="$SAVE_LDFLAGS"
-
 if test "x$with_libmongoc" = "xyes"; then
-  BUILD_WITH_LIBMONGOC_CPPFLAGS="$LIBMONGOC_CPPFLAGS"
+  BUILD_WITH_LIBMONGOC_CFLAGS="$LIBMONGOC_CFLAGS"
   BUILD_WITH_LIBMONGOC_LDFLAGS="$LIBMONGOC_LDFLAGS"
 fi
 
-AC_SUBST([BUILD_WITH_LIBMONGOC_CPPFLAGS])
+AC_SUBST([BUILD_WITH_LIBMONGOC_CFLAGS])
 AC_SUBST([BUILD_WITH_LIBMONGOC_LDFLAGS])
 # }}}
 
@@ -3557,7 +3660,7 @@ if test "x$with_libmnl" = "xyes"; then
         ]],
         [[
           int retval = TCA_STATS2;
-          return (retval);
+          return retval;
         ]]
       )
     ],
@@ -3577,7 +3680,7 @@ if test "x$with_libmnl" = "xyes"; then
         ]],
         [[
           int retval = TCA_STATS;
-          return (retval);
+          return retval;
         ]]
       )
     ],
@@ -3667,54 +3770,131 @@ AC_SUBST([LIBNETAPP_LIBS])
 # }}}
 
 # --with-libnetsnmp {{{
-AC_ARG_WITH(libnetsnmp, [AS_HELP_STRING([--with-libnetsnmp@<:@=PREFIX@:>@], [Path to the Net-SNMPD library.])],
-[
-	if test "x$withval" = "xno"
-	then
-		with_libnetsnmp="no"
-	else if test "x$withval" = "xyes"
-	then
-		with_libnetsnmp="yes"
-	else
-		with_libnetsnmp_cppflags="-I$withval/include"
-		with_libnetsnmp_ldflags="-I$withval/lib"
-		with_libnetsnmp="yes"
-	fi; fi
-],
-[with_libnetsnmp="yes"])
-if test "x$with_libnetsnmp" = "xyes"
-then
-	SAVE_CPPFLAGS="$CPPFLAGS"
-	CPPFLAGS="$CPPFLAGS $with_libnetsnmp_cppflags"
+AC_ARG_WITH([libnetsnmp],
+  [AS_HELP_STRING([--with-libnetsnmp@<:@=PREFIX@:>@], [Path to libnetsnmp.])],
+  [
+    if test "x$withval" = "xno"; then
+     with_libnetsnmp="no"
+    else if test "x$withval" = "xyes"; then
+     with_libnetsnmp="yes"
+    else
+      with_libnetsnmp_cppflags="-I$withval/include"
+      with_libnetsnmp_ldflags="-I$withval/lib"
+      with_libnetsnmp="yes"
+    fi; fi
+  ],
+  [with_libnetsnmp="yes"]
+)
 
-    AC_CHECK_HEADERS([net-snmp/net-snmp-config.h],
-      [with_libnetsnmp="yes"],
-      [with_libnetsnmp="no (net-snmp/net-snmp-config.h not found)"]
-    )
+if test "x$with_libnetsnmp" = "xyes"; then
+  SAVE_CPPFLAGS="$CPPFLAGS"
+  CPPFLAGS="$CPPFLAGS $with_libnetsnmp_cppflags"
 
-	CPPFLAGS="$SAVE_CPPFLAGS"
+  AC_CHECK_HEADERS([net-snmp/net-snmp-config.h],
+    [with_libnetsnmp="yes"],
+    [with_libnetsnmp="no (net-snmp/net-snmp-config.h not found)"]
+  )
+
+  AC_CHECK_HEADERS([net-snmp/net-snmp-includes.h],
+    [with_libnetsnmp="yes"],
+    [with_libnetsnmp="no (net-snmp/net-snmp-includes.h not found)"],
+    [[
+      #if HAVE_NET_SNMP_NET_SNMP_CONFIG_H
+      # include <net-snmp/net-snmp-config.h>
+      #endif
+    ]]
+  )
+
+  CPPFLAGS="$SAVE_CPPFLAGS"
 fi
-if test "x$with_libnetsnmp" = "xyes"
-then
-	SAVE_LDFLAGS="$LDFLAGS"
-	LDFLAGS="$LDFLAGS $with_libnetsnmp_ldflags"
 
-	AC_CHECK_LIB(netsnmp, init_snmp,
-		[with_libnetsnmp="yes"],
-		[with_libnetsnmp="no (libnetsnmp not found)"],
-		[$with_snmp_libs])
+if test "x$with_libnetsnmp" = "xyes"; then
+  SAVE_LDFLAGS="$LDFLAGS"
+  LDFLAGS="$LDFLAGS $with_libnetsnmp_ldflags"
 
-	LDFLAGS="$SAVE_LDFLAGS"
+  AC_CHECK_LIB([netsnmp], [init_snmp],
+    [with_libnetsmp="yes"],
+    [with_libnetsnmp="no (libnetsnmp not found)"]
+  )
+
+  LDFLAGS="$SAVE_LDFLAGS"
 fi
-if test "x$with_libnetsnmp" = "xyes"
-then
-	BUILD_WITH_LIBNETSNMP_CPPFLAGS="$with_libnetsnmp_cppflags"
-	BUILD_WITH_LIBNETSNMP_LDFLAGS="$with_libnetsnmp_ldflags"
-	BUILD_WITH_LIBNETSNMP_LIBS="-lnetsnmp"
+
+if test "x$with_libnetsnmp" = "xyes"; then
+  BUILD_WITH_LIBNETSNMP_CPPFLAGS="$with_libnetsnmp_cppflags"
+  BUILD_WITH_LIBNETSNMP_LDFLAGS="$with_libnetsnmp_ldflags"
+  BUILD_WITH_LIBNETSNMP_LIBS="-lnetsnmp"
 fi
-AC_SUBST(BUILD_WITH_LIBNETSNMP_CPPFLAGS)
-AC_SUBST(BUILD_WITH_LIBNETSNMP_LDFLAGS)
-AC_SUBST(BUILD_WITH_LIBNETSNMP_LIBS)
+
+AC_SUBST([BUILD_WITH_LIBNETSNMP_CPPFLAGS])
+AC_SUBST([BUILD_WITH_LIBNETSNMP_LDFLAGS])
+AC_SUBST([BUILD_WITH_LIBNETSNMP_LIBS])
+# }}}
+
+# --with-libnetsmpagent {{{
+AC_ARG_WITH([libnetsnmpagent],
+  [AS_HELP_STRING([--with-libnetsnmpagent@<:@=PREFIX@:>@], [Path to libnetsnmpagent.])],
+  [
+    if test "x$withval" = "xno"; then
+      with_libnetsnmpagent="no"
+    else if test "x$withval" = "xyes"; then
+      with_libnetsnmpagent="yes"
+    else
+      with_libnetsnmpagent_cppflags="-I$withval/include"
+      with_libnetsnmpagent_ldflags="-I$withval/lib"
+      with_libnetsnmpagent="yes"
+    fi; fi
+  ],
+  [with_libnetsnmpagent="yes"]
+)
+
+if test "x$with_libnetsnmpagent" = "xyes"; then
+  SAVE_CPPFLAGS="$CPPFLAGS"
+  CPPFLAGS="$CPPFLAGS $with_libnetsnmpagent_cppflags"
+
+  AC_CHECK_HEADERS([net-snmp/agent/net-snmp-agent-includes.h],
+    [],
+    [with_libnetsnmpagent="no (net-snmp/agent/net-snmp-agent-includes.h not found)"],
+    [[
+      #if HAVE_NET_SNMP_NET_SNMP_CONFIG_H
+      # include <net-snmp/net-snmp-config.h>
+      #endif
+      #if HAVE_NET_SNMP_NET_SNMP_INCLUDES_H
+      # include <net-snmp/net-snmp-includes.h>
+      #endif
+    ]]
+  )
+
+  CPPFLAGS="$SAVE_CPPFLAGS"
+fi
+
+if test "x$with_libnetsnmpagent" = "xyes"; then
+  SAVE_LDFLAGS="$LDFLAGS"
+  LDFLAGS="$LDFLAGS $with_libnetsnmpagent_ldflags"
+
+  # older versions of libnetsnmpagent fail to link
+  # against the helpers library, so do that explicitly
+  AC_CHECK_LIB([netsnmphelpers], [netsnmp_init_helpers],
+    [libnetsnmphelpers="-lnetsnmphelpers"],
+    [libnetsnmphelpers=""]
+  )
+
+  AC_CHECK_LIB([netsnmpagent], [init_agent],
+    [with_libnetsnmpagent="yes"],
+    [with_libnetsnmpagent="no (libnetsnmpagent not found)"],
+    [$libnetsnmphelpers]
+  )
+
+  LDFLAGS="$SAVE_LDFLAGS"
+fi
+
+if test "x$with_libnetsnmpagent" = "xyes"; then
+  BUILD_WITH_LIBNETSNMPAGENT_LIBS="-lnetsnmpagent $libnetsnmphelpers"
+fi
+
+AC_SUBST([BUILD_WITH_LIBNETSNMPAGENT_CPPFLAGS])
+AC_SUBST([BUILD_WITH_LIBNETSNMPAGENT_LDFLAGS])
+AC_SUBST([BUILD_WITH_LIBNETSNMPAGENT_LIBS])
 # }}}
 
 # --with-liboping {{{
@@ -4210,62 +4390,74 @@ AC_SUBST([BUILD_WITH_LIBPQ_LIBS])
 # }}}
 
 # --with-libpqos {{{
-with_libpqos_cppflags=""
-with_libpqos_ldflags=""
-AC_ARG_WITH(libpqos, [AS_HELP_STRING([--with-libpqos@<:@=PREFIX@:>@], [Path to libpqos.])],
-[
-	if test "x$withval" != "xno" && test "x$withval" != "xyes"
-	then
-		with_libpqos_cppflags="-I$withval/include"
-		with_libpqos_ldflags="-L$withval/lib"
-		with_libpqos="yes"
-	else
-		with_libpqos="$withval"
-	fi
-],
-[
-	with_libpqos="yes"
-])
-if test "x$with_libpqos" = "xyes"
-then
-	SAVE_CPPFLAGS="$CPPFLAGS"
-	CPPFLAGS="$CPPFLAGS $with_libpqos_cppflags"
+AC_ARG_WITH([libpqos],
+  [AS_HELP_STRING([--with-libpqos@<:@=PREFIX@:>@], [Path to libpqos.])],
+  [
+    if test "x$withval" != "xno" && test "x$withval" != "xyes"; then
+      with_libpqos_cppflags="-I$withval/include"
+      with_libpqos_ldflags="-L$withval/lib"
+      with_libpqos="yes"
+    else
+      with_libpqos="$withval"
+    fi
+  ],
+  [with_libpqos="yes"]
+)
 
-	AC_CHECK_HEADERS(pqos.h, [with_libpqos="yes"], [with_libpqos="no (pqos.h not found)"])
-
-	CPPFLAGS="$SAVE_CPPFLAGS"
-fi
-if test "x$with_libpqos" = "xyes"
-then
-	SAVE_CPPFLAGS="$CPPFLAGS"
-	SAVE_LDFLAGS="$LDFLAGS"
-	CPPFLAGS="$CPPFLAGS $with_libpqos_cppflags"
-	LDFLAGS="$LDFLAGS $with_libpqos_ldflags"
-
-	AC_CHECK_LIB(pqos, pqos_init, [with_libpqos="yes"], [with_libpqos="no (Can't find libpqos)"])
-
-	CPPFLAGS="$SAVE_CPPFLAGS"
-	LDFLAGS="$SAVE_LDFLAGS"
-fi
-if test "x$with_libpqos" = "xyes"
-then
+if test "x$with_libpqos" = "xyes"; then
   SAVE_CPPFLAGS="$CPPFLAGS"
   CPPFLAGS="$CPPFLAGS $with_libpqos_cppflags"
-  AC_RUN_IFELSE([AC_LANG_PROGRAM(
-    [[#include <pqos.h>]],
-    [[return !(PQOS_VERSION >= 106)]])],
-    [with_libpqos="yes"], [with_libpqos="no (pqos library version 1.06 or higher is required)"])
+
+  AC_CHECK_HEADERS([pqos.h],
+    [with_libpqos="yes"],
+    [with_libpqos="no (pqos.h not found)"]
+  )
+
   CPPFLAGS="$SAVE_CPPFLAGS"
 fi
-if test "x$with_libpqos" = "xyes"
-then
-	BUILD_WITH_LIBPQOS_CPPFLAGS="$with_libpqos_cppflags"
-	BUILD_WITH_LIBPQOS_LDFLAGS="$with_libpqos_ldflags"
-	BUILD_WITH_LIBPQOS_LIBS="-lpqos"
-	AC_SUBST(BUILD_WITH_LIBPQOS_CPPFLAGS)
-	AC_SUBST(BUILD_WITH_LIBPQOS_LDFLAGS)
-	AC_SUBST(BUILD_WITH_LIBPQOS_LIBS)
+
+if test "x$with_libpqos" = "xyes"; then
+  SAVE_LDFLAGS="$LDFLAGS"
+  LDFLAGS="$LDFLAGS $with_libpqos_ldflags"
+
+  AC_CHECK_LIB([pqos], [pqos_init],
+    [with_libpqos="yes"],
+    [with_libpqos="no (Can't find libpqos)"]
+  )
+
+  LDFLAGS="$SAVE_LDFLAGS"
 fi
+
+if test "x$with_libpqos" = "xyes"; then
+  SAVE_CPPFLAGS="$CPPFLAGS"
+  CPPFLAGS="$CPPFLAGS $with_libpqos_cppflags"
+  AC_PREPROC_IFELSE(
+    [
+      AC_LANG_SOURCE(
+        [[
+          #include <pqos.h>
+          #if PQOS_VERSION < 106
+          #error "required PQOS version >= 1.06"
+          #endif
+        ]]
+      )
+    ],
+    [with_libpqos="yes"],
+    [with_libpqos="no (pqos library version 1.06 or higher is required)"]
+  )
+
+  CPPFLAGS="$SAVE_CPPFLAGS"
+fi
+
+if test "x$with_libpqos" = "xyes"; then
+  BUILD_WITH_LIBPQOS_CPPFLAGS="$with_libpqos_cppflags"
+  BUILD_WITH_LIBPQOS_LDFLAGS="$with_libpqos_ldflags"
+  BUILD_WITH_LIBPQOS_LIBS="-lpqos"
+fi
+
+AC_SUBST([BUILD_WITH_LIBPQOS_CPPFLAGS])
+AC_SUBST([BUILD_WITH_LIBPQOS_LDFLAGS])
+AC_SUBST([BUILD_WITH_LIBPQOS_LIBS])
 # }}}
 
 # --with-libprotobuf {{{
@@ -5211,8 +5403,7 @@ if test "x$with_libupsclient" = "xyes"; then
   )
 
   AC_CHECK_LIB([upsclient], [upscli_init],
-    [AC_DEFINE([WITH_UPSCLIENT_27], [1], [At least version 2-7])],
-    []
+    [AC_DEFINE([HAVE_UPSCLI_INIT], [1], [Define when upscli_init() (since version 2-7) is available.])]
   )
 
   LDFLAGS="$SAVE_LDFLAGS"
@@ -6395,6 +6586,7 @@ AC_PLUGIN([serial],              [$plugin_serial],          [serial port traffic
 AC_PLUGIN([sigrok],              [$with_libsigrok],         [sigrok acquisition sources])
 AC_PLUGIN([smart],               [$plugin_smart],           [SMART statistics])
 AC_PLUGIN([snmp],                [$with_libnetsnmp],        [SNMP querying plugin])
+AC_PLUGIN([snmp_agent],          [$with_libnetsnmpagent],   [SNMP agent plugin])
 AC_PLUGIN([statsd],              [yes],                     [StatsD plugin])
 AC_PLUGIN([swap],                [$plugin_swap],            [Swap usage statistics])
 AC_PLUGIN([syslog],              [$have_syslog],            [Syslog logging plugin])
@@ -6551,15 +6743,14 @@ AC_ARG_WITH(perl-bindings, [AS_HELP_STRING([--with-perl-bindings@<:@=OPTIONS@:>@
   fi
 ])
 
-if test "x$with_perl_bindings" = "xyes"
-then
-	AC_MSG_CHECKING([for the ExtUtils::MakeMaker module])
-	if $PERL -MExtUtils::MakeMaker -e '' 2>/dev/null; then
-		AC_MSG_RESULT([yes])
-	else
-		AC_MSG_RESULT([no])
-		with_perl_bindings="no (ExtUtils::MakeMaker not found)"
-	fi
+if test "x$with_perl_bindings" = "xyes"; then
+  AC_MSG_CHECKING([for the ExtUtils::MakeMaker module])
+  if $PERL -MExtUtils::MakeMaker -e '' 2>/dev/null; then
+    AC_MSG_RESULT([yes])
+  else
+    AC_MSG_RESULT([no])
+    with_perl_bindings="no (ExtUtils::MakeMaker not found)"
+  fi
 fi
 
 if test "x$with_perl_bindings" = "xyes"
@@ -6629,6 +6820,7 @@ AC_MSG_RESULT()
 AC_MSG_RESULT([Configuration:])
 AC_MSG_RESULT([  Build:])
 AC_MSG_RESULT([    Platform  . . . . . . $ac_system])
+AC_MSG_RESULT([    Compiler vendor . . . $ax_cv_c_compiler_vendor])
 AC_MSG_RESULT([    CC  . . . . . . . . . $CC])
 AC_MSG_RESULT([    CFLAGS  . . . . . . . $AM_CFLAGS $CFLAGS])
 AC_MSG_RESULT([    CXXFLAGS  . . . . . . $AM_CXXFLAGS $CXXFLAGS])
@@ -6672,6 +6864,7 @@ AC_MSG_RESULT([    libmosquitto  . . . . $with_libmosquitto])
 AC_MSG_RESULT([    libmysql  . . . . . . $with_libmysql])
 AC_MSG_RESULT([    libnetapp . . . . . . $with_libnetapp])
 AC_MSG_RESULT([    libnetsnmp  . . . . . $with_libnetsnmp])
+AC_MSG_RESULT([    libnetsnmpagent . . . $with_libnetsnmpagent])
 AC_MSG_RESULT([    libnotify . . . . . . $with_libnotify])
 AC_MSG_RESULT([    libopenipmi . . . . . $with_libopenipmipthread])
 AC_MSG_RESULT([    liboping  . . . . . . $with_liboping])
@@ -6821,6 +7014,7 @@ AC_MSG_RESULT([    serial  . . . . . . . $enable_serial])
 AC_MSG_RESULT([    sigrok  . . . . . . . $enable_sigrok])
 AC_MSG_RESULT([    smart . . . . . . . . $enable_smart])
 AC_MSG_RESULT([    snmp  . . . . . . . . $enable_snmp])
+AC_MSG_RESULT([    snmp_agent  . . . . . $enable_snmp_agent])
 AC_MSG_RESULT([    statsd  . . . . . . . $enable_statsd])
 AC_MSG_RESULT([    swap  . . . . . . . . $enable_swap])
 AC_MSG_RESULT([    syslog  . . . . . . . $enable_syslog])
